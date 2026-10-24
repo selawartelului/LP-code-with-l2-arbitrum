@@ -1,0 +1,73 @@
+
+ // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+contract SimpleLP is ERC20, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    IERC20 public immutable tokenA;
+    IERC20 public immutable tokenB;
+
+    constructor(address _tokenA, address _tokenB)
+        ERC20("Simple LP Token", "SLP")
+    {
+        require(_tokenA != _tokenB, "Same token");
+        require(_tokenA != address(0), "Zero token A");
+        require(_tokenB != address(0), "Zero token B");
+
+        tokenA = IERC20(_tokenA);
+        tokenB = IERC20(_tokenB);
+    }
+
+    function addLiquidity(
+        uint256 amountA,
+        uint256 amountB
+    ) external nonReentrant returns (uint256 shares) {
+        require(amountA > 0 && amountB > 0, "Zero amount");
+
+        uint256 reserveA = tokenA.balanceOf(address(this));
+        uint256 reserveB = tokenB.balanceOf(address(this));
+        uint256 supply = totalSupply();
+
+        if (supply == 0) {
+            shares = amountA < amountB ? amountA : amountB;
+        } else {
+            require(reserveA > 0 && reserveB > 0, "Empty pool");
+
+            uint256 sharesA = amountA * supply / reserveA;
+            uint256 sharesB = amountB * supply / reserveB;
+            shares = sharesA < sharesB ? sharesA : sharesB;
+        }
+
+        require(shares > 0, "Zero shares");
+
+        tokenA.safeTransferFrom(msg.sender, address(this), amountA);
+        tokenB.safeTransferFrom(msg.sender, address(this), amountB);
+
+        _mint(msg.sender, shares);
+    }
+
+    function removeLiquidity(
+        uint256 shares
+    ) external nonReentrant {
+        require(shares > 0, "Zero shares");
+
+        uint256 supply = totalSupply();
+        require(balanceOf(msg.sender) >= shares, "Insufficient LP");
+
+        uint256 amountA =
+            tokenA.balanceOf(address(this)) * shares / supply;
+        uint256 amountB =
+            tokenB.balanceOf(address(this)) * shares / supply;
+
+        _burn(msg.sender, shares);
+
+        tokenA.safeTransfer(msg.sender, amountA);
+        tokenB.safeTransfer(msg.sender, amountB);
+    }
+}
